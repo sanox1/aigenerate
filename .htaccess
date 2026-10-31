@@ -1,0 +1,3 @@
+<FilesMatch "^auth\.json$">
+  Require all denied
+</FilesMatch>
