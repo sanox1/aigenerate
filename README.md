@@ -8,6 +8,8 @@ place all files and folders on any hosting with php / curl enabled
   Require all denied
 </FilesMatch>
 change user1 to your username
-3. replace OPENROUTER_KEY with your key in status.php, generate.php
-4. replace UPLOAD_URL, HTTP-Referer in generate.php with your own url
-5. load some credits in openrouter for your balance
+
+4. replace OPENROUTER_KEY with your key in status.php, generate.php
+5. replace UPLOAD_URL, HTTP-Referer in generate.php with your own url
+6. load some credits in openrouter for your balance
+7. remember to clean uploads dir periodically or if your hosting allows it , clean it every day via cronjob.
