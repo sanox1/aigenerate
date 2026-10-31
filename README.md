@@ -1,4 +1,4 @@
-# aigenerate
+# AI generate
 uses openrouter api to generate video and images (currenlty only video). For personal use only.
 
 
