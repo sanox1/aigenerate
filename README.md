@@ -1,6 +1,10 @@
 # aigenerate
 uses openrouter api to generate video and images (currenlty only video). For personal use only.
+
+
 Deploy checklist
+
+
 place all files and folders on any hosting with php / curl enabled
 
 1. make-hash.php → run once → copy hash and put it in auth.json as password → delete make-hash.php.
