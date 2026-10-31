@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in · AI Video Generator</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
+  body {
+    background: #0b0b14; color: #e9eef3; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+  }
+  .card {
+    background: #10131f; border: 1px solid #2a2f3e; border-radius: 1.5rem;
+    padding: 2.5rem 2rem; width: 100%; max-width: 380px;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,.8);
+  }
+  h1 {
+    font-size: 1.4rem; font-weight: 600; margin-bottom: 1.5rem;
+    background: linear-gradient(135deg,#c084fc,#60a5fa,#f97316);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  label { display: block; font-size: .75rem; text-transform: uppercase;
+          letter-spacing: .08em; color: #94a3b8; margin: 1rem 0 .4rem; }
+  input {
+    width: 100%; padding: .85rem 1rem; border-radius: .75rem;
+    background: #121724; border: 1px solid #2a2f3e; color: #f1f5f9;
+    font-size: .95rem; outline: none; transition: all .15s;
+  }
+  input:focus { border-color: #fbbf24; box-shadow: 0 0 0 2px rgba(251,191,36,.2); }
+  button {
+    width: 100%; margin-top: 1.5rem; padding: .9rem 1rem; border: none;
+    border-radius: .9rem; background: #fbbf24; color: #0b0e17;
+    font-weight: 700; font-size: 1rem; cursor: pointer;
+  }
+  button:hover { background: #fcd34d; }
+  button:disabled { opacity: .6; cursor: not-allowed; }
+  .err { color: #fca5a5; font-size: .85rem; margin-top: 1rem; min-height: 1.2rem; }
+</style>
+</head>
+<body>
+  <form class="card" id="loginForm">
+    <h1>Sign in to continue</h1>
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button id="submitBtn" type="submit">Log in</button>
+    <div class="err" id="err"></div>
+  </form>
+<script>
+  const form   = document.getElementById('loginForm');
+  const btn    = document.getElementById('submitBtn');
+  const errEl  = document.getElementById('err');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    try {
+      const body = new URLSearchParams();
+      body.set('action', 'login');
+      body.set('username', form.username.value.trim());
+      body.set('password', form.password.value);
+      const res  = await fetch('/auth.php', { method: 'POST', body });
+      const data = await res.json();
+      if (!data.ok) {
+        errEl.textContent = data.error || 'Login failed';
+        return;
+      }
+      window.location.href = '/index.html';
+    } catch (err) {
+      errEl.textContent = 'Network error';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Log in';
+    }
+  });
+</script>
+</body>
+</html>

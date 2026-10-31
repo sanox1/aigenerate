@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Video Generator · HeyGen</title>
+  <!-- Font Awesome for icons (optional but adds visual polish) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    /* ----- DARK THEME BASE (inspired by the reference) ----- */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background-color: #0b0b14;
+      color: #e9eef3;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .generator-card {
+      max-width: 1300px;
+      width: 100%;
+      background: #10131f;
+      border: 1px solid #2a2f3e;
+      border-radius: 1.5rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+      overflow: hidden;
+      backdrop-filter: blur(8px);
+    }
+
+    /* ----- HEADER ----- */
+    .header {
+      padding: 1.75rem 2rem 1rem 2rem;
+      border-bottom: 1px solid #232838;
+    }
+
+    .header h1 {
+      font-size: 1.9rem;
+      font-weight: 600;
+      background: linear-gradient(135deg, #c084fc, #60a5fa, #f97316);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      letter-spacing: -0.02em;
+    }
+
+    .header h1 i {
+      background: #1e1f2e;
+      padding: 0.5rem;
+      border-radius: 0.75rem;
+      font-size: 1.4rem;
+      color: #fbbf24;
+      -webkit-text-fill-color: #fbbf24;
+    }
+
+    .subhead {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-top: 0.3rem;
+      padding-left: 0.2rem;
+      letter-spacing: 0.2px;
+    }
+
+    /* ----- TABS ----- */
+    .tabs {
+      display: flex;
+      padding: 1rem 2rem 0 2rem;
+      gap: 0.5rem;
+      border-bottom: 1px solid #232838;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 1rem;
+      font-weight: 500;
+      padding: 0.7rem 1.5rem;
+      border-radius: 0.75rem 0.75rem 0 0;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+
+    .tab-btn i {
+      font-size: 1rem;
+    }
+
+    .tab-btn:hover {
+      color: #cbd5e1;
+      background: #1a1e2b;
+    }
+
+    .tab-btn.active {
+      color: #ffffff;
+      border-bottom: 2px solid #fbbf24;
+      background: #0b0e17;
+    }
+
+    /* ----- MAIN PANEL (controls + preview) ----- */
+    .panel {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 1px;
+      background: #232838;
+    }
+
+    @media (max-width: 900px) {
+      .panel {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ----- CONTROL SECTION ----- */
+    .controls {
+      background: #0b0e17;
+      padding: 2rem 1.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.8rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .control-group label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .control-group label i {
+      color: #fbbf24;
+      font-size: 0.9rem;
+    }
+
+    /* unified input / select / textarea styles */
+    .input-field, .select-field, .file-upload-area {
+      background: #121724;
+      border: 1px solid #2a2f3e;
+      border-radius: 0.75rem;
+      padding: 0.85rem 1rem;
+      color: #f1f5f9;
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.15s;
+      width: 100%;
+    }
+
+    .input-field:focus, .select-field:focus, .file-upload-area:focus-within {
+      border-color: #fbbf24;
+      box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
+    }
+
+    textarea.input-field {
+      min-height: 130px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    .char-counter {
+      text-align: right;
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+
+    /* select style */
+    .select-field {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 1rem center;
+      background-size: 1.1rem;
+      cursor: pointer;
+    }
+
+    .select-field option {
+      background: #121724;
+      color: #e2e8f0;
+    }
+
+    /* file upload */
+    .file-upload-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.8rem 1rem;
+      border: 1px dashed #3f4658;
+      cursor: pointer;
+      text-align: center;
+      gap: 0.5rem;
+      transition: border 0.15s, background 0.15s;
+    }
+
+    .file-upload-area i {
+      font-size: 2rem;
+      color: #fbbf24;
+    }
+
+    .file-upload-area span {
+      font-size: 0.9rem;
+      color: #94a3b8;
+    }
+
+    .file-upload-area small {
+      font-size: 0.75rem;
+      color: #5f6b7e;
+    }
+
+    .file-upload-area:hover {
+      border-color: #fbbf24;
+      background: #171e2c;
+    }
+
+    .file-upload-area input[type="file"] {
+      display: none;
+    }
+
+	.file-name {
+		font-size: 0.8rem;
+		color: #cbd5e1;
+		flex: 1;
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.file-name-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.2rem;
+		padding: 0.4rem 0.6rem;
+		background: #121724;
+		border: 1px solid #2a2f3e;
+		border-radius: 0.5rem;
+	}
+	
+	.file-name {
+		font-size: 0.8rem;
+		color: #cbd5e1;
+		word-break: break-all;
+		flex: 1;
+		min-width: 0;             /* allow truncation */
+	}
+	
+	.remove-image-btn {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		border-radius: 50%;
+		border: 1px solid #3f4658;
+		background: #1a1e2b;
+		color: #94a3b8;
+		cursor: pointer;
+		font-size: 0.75rem;
+		transition: all 0.15s;
+		padding: 0;
+	}
+	
+	.remove-image-btn:hover {
+		background: #7f1d1d;
+		border-color: #ef4444;
+		color: #fecaca;
+	}
+
+    /* row for resolution & duration side by side */
+    .row-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    /* Generate button */
+    .generate-btn {
+      background: #fbbf24;
+      color: #0b0e17;
+      border: none;
+      padding: 1rem 1.8rem;
+      border-radius: 0.9rem;
+      font-weight: 700;
+      font-size: 1.05rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      transition: all 0.15s;
+      margin-top: 0.5rem;
+      box-shadow: 0 10px 20px -8px rgba(251, 191, 36, 0.3);
+    }
+
+    .generate-btn i {
+      font-size: 1.1rem;
+    }
+
+    .generate-btn:hover {
+      background: #fcd34d;
+      transform: scale(1.01);
+    }
+
+    .generate-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* ----- PREVIEW SECTION ----- */
+    .preview-pane {
+      background: #080b12;
+      padding: 2rem 1.8rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-left: 1px solid #232838;
+    }
+
+    @media (max-width: 900px) {
+      .preview-pane {
+        border-left: none;
+        border-top: 1px solid #232838;
+      }
+    }
+
+    .preview-box {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #0f131e;
+      border: 1px dashed #2a2f3e;
+      border-radius: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 1rem;
+      transition: all 0.2s;
+      overflow: hidden;
+    }
+
+    .preview-box.has-video {
+      border-style: solid;
+      border-color: #fbbf24;
+      padding: 0;
+      background: #000;
+    }
+
+    .preview-placeholder i {
+      font-size: 2.8rem;
+      color: #334155;
+      margin-bottom: 0.8rem;
+    }
+
+    .preview-placeholder p {
+      color: #64748b;
+      font-size: 0.95rem;
+    }
+
+    .preview-box video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #000;
+    }
+
+    .download-btn {
+      margin-top: 1.2rem;
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      border-radius: 2rem;
+      padding: 0.7rem 1.5rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-decoration: none;
+      visibility: hidden;
+      opacity: 0;
+    }
+
+    .download-btn.visible {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    .download-btn:hover {
+      background: #2d3a4f;
+      border-color: #fbbf24;
+    }
+
+    .note {
+      font-size: 0.75rem;
+      color: #475569;
+      margin-top: 1.2rem;
+      text-align: center;
+    }
+
+    /* message / status */
+    .status-msg {
+      font-size: 0.85rem;
+      color: #fbbf24;
+      margin-top: 0.6rem;
+      min-height: 1.2rem;
+    }
+
+    /* tab panel visibility */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+      gap: 1.8rem;
+    }
+  </style>
+</head>
+<body>
+
+<div class="generator-card">
+  <!-- HEADER -->
+  <div class="header">
+    <h1>
+      <i class="fas fa-clapperboard"></i> AI Video Generator
+    </h1>
+    <div class="subhead">Powered by <strong>heygen/heygen-video-1</strong> · OpenRouter</div>
+	<button id="logoutBtn" style="margin-left:auto; background:#1a1e2b; border:1px solid #2a2f3e;
+        color:#94a3b8; padding:.5rem .9rem; border-radius:.6rem; cursor:pointer;
+        font-size:.85rem;">Log out</button>
+		
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab-btn active" id="tabTextBtn" data-tab="text">
+      <i class="fas fa-keyboard"></i> Text to video
+    </button>
+    <button class="tab-btn" id="tabImageBtn" data-tab="image">
+      <i class="fas fa-image"></i> Image to video
+    </button>
+  </div>
+
+  <!-- MAIN PANEL -->
+  <div class="panel">
+    <!-- LEFT: CONTROLS -->
+    <div class="controls">
+      <!-- TEXT TO VIDEO TAB CONTENT -->
+      <div id="textTab" class="tab-content active">
+        <div class="control-group">
+          <label><i class="fas fa-pen-fancy"></i> Describe your vision</label>
+          <textarea id="promptText" class="input-field" maxlength="5000" placeholder="A cinematic drone shot flying over a misty forest at sunrise, volumetric lighting, ultra detailed..."></textarea>
+          <div class="char-counter"><span id="charCountText">0</span> / 5,000</div>
+        </div>
+
+        <div class="row-2col">
+          <div class="control-group">
+            <label><i class="fas fa-expand"></i> Aspect ratio</label>
+            <select id="aspectRatioText" class="select-field">
+              <option value="16:9">16:9 (Landscape)</option>
+              <option value="9:16">9:16 (Portrait)</option>
+              <option value="1:1">1:1 (Square)</option>
+              <option value="4:3">4:3 (Classic)</option>
+              <option value="21:9">21:9 (Cinema)</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label><i class="fas fa-monitor"></i> Resolution</label>
+            <select id="resolutionText" class="select-field">
+              <option value="480p">480p</option>
+              <option value="768p">768p</option>
+              <option value="2K" selected>2K</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label><i class="fas fa-clock"></i> Duration</label>
+          <select id="durationText" class="select-field">
+            <option value="5s">5 seconds</option>
+            <option value="6s">6 seconds</option>
+            <option value="7s">7 seconds</option>
+            <option value="8s">8 seconds</option>
+            <option value="9s">9 seconds</option>
+            <option value="10s">10 seconds</option>
+            <option value="11s">11 seconds</option>
+            <option value="12s">12 seconds</option>
+            <option value="13s">13 seconds</option>
+            <option value="14s">14 seconds</option>
+            <option value="15s">15 seconds</option>
+          </select>
+        </div>
+
+        <button id="generateTextBtn" class="generate-btn">
+          <i class="fas fa-sparkles"></i> Generate video
+        </button>
+        <div id="statusText" class="status-msg"></div>
+      </div>
+
+      <!-- IMAGE TO VIDEO TAB CONTENT -->
+      <div id="imageTab" class="tab-content">
+        <div class="control-group">
+          <label><i class="fas fa-upload"></i> Reference image</label>
+          <label for="imageUpload" class="file-upload-area" id="dropZone">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Click to upload or drag & drop</span>
+            <small>PNG, JPG, GIF accepted</small>
+            <input type="file" id="imageUpload" accept="image/png, image/jpeg, image/gif">
+          </label>
+			<div id="fileNameRow" class="file-name-row" style="display: none;">
+				<span id="fileNameDisplay" class="file-name"></span>
+				<button type="button" id="removeImageBtn" class="remove-image-btn" title="Remove image" aria-label="Remove image">
+					<i class="fas fa-times"></i>
+				</button>
+			</div>
+
+        </div>
+
+        <!-- NEW: Describe how the reference image should move -->
+        <div class="control-group">
+          <label><i class="fas fa-pen-fancy"></i> Describe how the reference image should move</label>
+          <textarea id="promptImage" class="input-field" maxlength="5000" placeholder="Slow zoom in on the subject, gentle camera pan to the right, leaves rustling in the background..."></textarea>
+          <div class="char-counter"><span id="charCountImage">0</span> / 5,000</div>
+        </div>
+
+        <div class="row-2col">
+          <div class="control-group">
+            <label><i class="fas fa-monitor"></i> Resolution</label>
+            <select id="resolutionImage" class="select-field">
+              <option value="480p">480p</option>
+              <option value="768p">768p</option>
+              <option value="2K" selected>2K</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label><i class="fas fa-clock"></i> Duration</label>
+            <select id="durationImage" class="select-field">
+              <option value="5s">5 seconds</option>
+              <option value="6s">6 seconds</option>
+              <option value="7s">7 seconds</option>
+              <option value="8s">8 seconds</option>
+              <option value="9s">9 seconds</option>
+              <option value="10s">10 seconds</option>
+              <option value="11s">11 seconds</option>
+              <option value="12s">12 seconds</option>
+              <option value="13s">13 seconds</option>
+              <option value="14s">14 seconds</option>
+              <option value="15s">15 seconds</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="generateImageBtn" class="generate-btn">
+          <i class="fas fa-sparkles"></i> Generate video
+        </button>
+        <div id="statusImage" class="status-msg"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: PREVIEW -->
+    <div class="preview-pane">
+      <div id="previewBox" class="preview-box">
+        <!-- placeholder initially -->
+        <div class="preview-placeholder" id="previewPlaceholder">
+          <i class="fas fa-film"></i>
+          <p>Your generated video will appear here</p>
+        </div>
+        <!-- video element (hidden initially) -->
+        <video id="videoPreview" controls style="display: none;"></video>
+      </div>
+	  <a id="downloadLink" class="download-btn" download target="_blank" rel="noopener">
+		<i class="fas fa-download"></i> Download video
+	  </a>
+      <div class="note">Preview is for demonstration · actual model output may vary</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // ----- auth gate first -----
+  (async () => {
+    try {
+      const res  = await fetch('/auth.php?action=check', { cache: 'no-store' });
+      const data = await res.json();
+      if (!data.ok) { location.replace('/login.html'); return; }
+      boot();
+    } catch {
+      location.replace('/login.html');
+    }
+  })();
+
+  function boot() {
+    // ----- DOM references -----
+    const tabTextBtn = document.getElementById('tabTextBtn');
+    const tabImageBtn = document.getElementById('tabImageBtn');
+    const textTab = document.getElementById('textTab');
+    const imageTab = document.getElementById('imageTab');
+
+    // Text tab elements
+    const promptText = document.getElementById('promptText');
+    const charCountText = document.getElementById('charCountText');
+    const aspectRatioText = document.getElementById('aspectRatioText');
+    const resolutionText = document.getElementById('resolutionText');
+    const durationText = document.getElementById('durationText');
+    const generateTextBtn = document.getElementById('generateTextBtn');
+    const statusText = document.getElementById('statusText');
+
+    // Image tab elements
+    const imageUpload = document.getElementById('imageUpload');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const promptImage = document.getElementById('promptImage');
+    const charCountImage = document.getElementById('charCountImage');
+    const resolutionImage = document.getElementById('resolutionImage');
+    const durationImage = document.getElementById('durationImage');
+    const generateImageBtn = document.getElementById('generateImageBtn');
+    const statusImage = document.getElementById('statusImage');
+
+    // Preview elements
+    const previewBox = document.getElementById('previewBox');
+    const previewPlaceholder = document.getElementById('previewPlaceholder');
+    const videoPreview = document.getElementById('videoPreview');
+    const downloadLink = document.getElementById('downloadLink');
+
+    // ----- state -----
+    let currentTab = 'text';          // 'text' or 'image'
+    let uploadedImageFile = null;
+    let lastVideoUrl = null;          // object URL for download
+
+    // ----- helper: clear preview / reset video state -----
+    function resetPreview() {
+	  if (lastVideoUrl && lastVideoUrl.startsWith('blob:')) {
+	  	URL.revokeObjectURL(lastVideoUrl);
+	  }
+	  lastVideoUrl = null;
+      videoPreview.pause();
+      videoPreview.removeAttribute('src');
+      videoPreview.style.display = 'none';
+      previewPlaceholder.style.display = 'flex';
+      previewBox.classList.remove('has-video');
+      downloadLink.classList.remove('visible');
+      downloadLink.removeAttribute('href');
+    }
+
+    // ----- set preview video from a blob url -----
+	function setPreviewVideo(url) {
+		// Don't revoke remote URLs; only revoke blob: URLs we created
+		if (lastVideoUrl && lastVideoUrl.startsWith('blob:')) {
+			URL.revokeObjectURL(lastVideoUrl);
+		}
+		lastVideoUrl = url;
+		
+		videoPreview.src = url;
+		videoPreview.style.display = 'block';
+		previewPlaceholder.style.display = 'none';
+		previewBox.classList.add('has-video');
+		
+		// Let the download go through our own PHP proxy so cross-origin download works
+		downloadLink.href = '/download.php?url=' + encodeURIComponent(url);
+		downloadLink.classList.add('visible');
+	}
+
+    // ----- simulate video generation (placeholder) -----
+	async function generateVideo({
+		mode,
+		prompt,
+		duration = 5,
+		resolution = '768p',
+		aspectRatio = '16:9',
+		imageFile = null,
+		onStatus = console.log,
+		pollIntervalMs = 3000,
+		maxWaitMs = 10 * 60 * 1000,   // 10 min hard cap
+		}) {
+		// ---- 1) submit ----
+		onStatus('Submitting job…');
+		const form = new FormData();
+		form.append('mode', mode);
+		form.append('prompt', prompt);
+		form.append('duration', duration);
+		form.append('resolution', resolution);
+		form.append('aspect_ratio', aspectRatio);
+		if (imageFile) form.append('image', imageFile);
+		
+		const submitRes = await fetch('/generate.php', { method: 'POST', body: form });
+		const submit = await submitRes.json();
+		if (!submit.ok) throw new Error(submit.error || 'Submit failed');
+		
+		const jobId  = submit.job_id;
+		const pollUrl = submit.polling_url;
+		onStatus(`Job ${jobId} queued…`);
+		
+		// ---- 2) poll ----
+		const start = Date.now();
+		let attempt = 0;
+		
+		while (Date.now() - start < maxWaitMs) {
+			await new Promise(r => setTimeout(r, pollIntervalMs));
+			attempt++;
+		
+			const qs = new URLSearchParams({ id: jobId, poll: pollUrl }).toString();
+			let status;
+			try {
+			const res = await fetch(`/status.php?${qs}`, { cache: 'no-store' });
+			status = await res.json();
+			} catch (e) {
+			// Network blip — keep trying
+			onStatus(`Polling… (retry ${attempt})`);
+			continue;
+			}
+		
+			if (!status.ok) throw new Error(status.error || 'Poll failed');
+		
+			if (status.status === 'completed') {
+			onStatus('✅ Completed');
+			return status.video_url;
+			}
+			if (status.status === 'failed') {
+			throw new Error(status.error || 'Generation failed');
+			}
+		
+			const elapsed = Math.round((Date.now() - start) / 1000);
+			onStatus(`Status: ${status.status} · ${elapsed}s`);
+		}
+	
+	throw new Error('Timed out waiting for the video');
+	}
+
+    // ----- TAB SWITCHING -----
+    function setActiveTab(tab) {
+      currentTab = tab;
+      
+      if (tab === 'text') {
+        tabTextBtn.classList.add('active');
+        tabImageBtn.classList.remove('active');
+        textTab.classList.add('active');
+        imageTab.classList.remove('active');
+      } else {
+        tabImageBtn.classList.add('active');
+        tabTextBtn.classList.remove('active');
+        imageTab.classList.add('active');
+        textTab.classList.remove('active');
+      }
+    }
+
+    tabTextBtn.addEventListener('click', () => setActiveTab('text'));
+    tabImageBtn.addEventListener('click', () => setActiveTab('image'));
+
+    // ----- TEXT TAB: character counter -----
+    promptText.addEventListener('input', () => {
+      charCountText.textContent = promptText.value.length;
+    });
+    // ----- logout button -----
+	document.getElementById('logoutBtn').addEventListener('click', async () => {
+		await fetch('/auth.php?action=logout', { method: 'POST' });
+		location.replace('/login.html');
+	});
+
+    // ----- IMAGE TAB: character counter for motion prompt -----
+    promptImage.addEventListener('input', () => {
+      charCountImage.textContent = promptImage.value.length;
+    });
+
+    // ----- IMAGE TAB: file upload handling -----
+	const fileNameRow      = document.getElementById('fileNameRow');
+	const removeImageBtn   = document.getElementById('removeImageBtn');
+	
+	function clearImageSelection() {
+	imageUpload.value = '';          // resets the <input type="file">
+	uploadedImageFile = null;
+	fileNameDisplay.textContent = '';
+	fileNameRow.style.display = 'none';
+	}
+	
+	imageUpload.addEventListener('change', (e) => {
+	const file = e.target.files[0];
+	if (!file) {
+		clearImageSelection();
+		return;
+	}
+	const allowed = ['image/png', 'image/jpeg', 'image/gif'];
+	if (!allowed.includes(file.type)) {
+		alert('Please upload a PNG, JPG, or GIF file.');
+		clearImageSelection();
+		return;
+	}
+	uploadedImageFile = file;
+	fileNameDisplay.textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+	fileNameRow.style.display = 'flex';
+	});
+	
+	removeImageBtn.addEventListener('click', () => {
+	clearImageSelection();
+	});
+
+    // Drag and drop
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = '#fbbf24';
+      dropZone.style.background = '#171e2c';
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = '#3f4658';
+      dropZone.style.background = '';
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = '#3f4658';
+      dropZone.style.background = '';
+      const files = e.dataTransfer.files;
+      if (files.length) {
+        imageUpload.files = files;
+        const event = new Event('change', { bubbles: true });
+        imageUpload.dispatchEvent(event);
+      }
+    });
+
+    // ----- GENERATE BUTTONS -----
+	generateTextBtn.addEventListener('click', async () => {
+	const prompt = promptText.value.trim();
+	if (!prompt) {
+		statusText.textContent = '⚠️ Please describe your vision before generating.';
+		return;
+	}
+	
+	resetPreview();
+	statusText.textContent = '';
+	generateTextBtn.disabled = true;
+	const originalHTML = generateTextBtn.innerHTML;
+	generateTextBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
+	
+	try {
+		const videoUrl = await generateVideo({
+		mode: 'text',
+		prompt,
+		duration: parseInt(durationText.value, 10),
+		resolution: resolutionText.value,
+		aspectRatio: aspectRatioText.value,
+		onStatus: (msg) => statusText.textContent = msg,
+		});
+		setPreviewVideo(videoUrl);            // remote URL – works fine in <video>
+ 
+		statusText.textContent = '✅ Done!';
+	} catch (err) {
+		statusText.textContent = '❌ ' + err.message;
+	} finally {
+		generateTextBtn.disabled = false;
+		generateTextBtn.innerHTML = originalHTML;
+	}
+	});
+	
+	generateImageBtn.addEventListener('click', async () => {
+	if (!uploadedImageFile) {
+		statusImage.textContent = '⚠️ Please upload a reference image first.';
+		return;
+	}
+	const motionPrompt = promptImage.value.trim();
+	if (!motionPrompt) {
+		statusImage.textContent = '⚠️ Please describe how the reference image should move.';
+		return;
+	}
+	
+	resetPreview();
+	statusImage.textContent = '';
+	generateImageBtn.disabled = true;
+	const originalHTML = generateImageBtn.innerHTML;
+	generateImageBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
+	
+	try {
+		const videoUrl = await generateVideo({
+		mode: 'image',
+		prompt: motionPrompt,
+		duration: parseInt(durationImage.value, 10),
+		resolution: resolutionImage.value,
+		aspectRatio: '16:9',            // ignored by API in image mode
+		imageFile: uploadedImageFile,
+		onStatus: (msg) => statusImage.textContent = msg,
+		});
+		setPreviewVideo(videoUrl);
+		statusImage.textContent = '✅ Done!';
+	} catch (err) {
+		statusImage.textContent = '❌ ' + err.message;
+	} finally {
+		generateImageBtn.disabled = false;
+		generateImageBtn.innerHTML = originalHTML;
+	}
+	}); 
+
+    // On page load, reset preview
+    resetPreview();
+
+  }
+ })();
+</script>
+</body>
+</html>
