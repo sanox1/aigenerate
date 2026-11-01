@@ -8,7 +8,7 @@ if (empty($_SESSION['user'])) {
     exit;
 }
 
-const OPENROUTER_KEY = 'sk-or-v1-REPLACEME';
+const OPENROUTER_KEY = 'sk-or-v1-replace_ME';
 const UPLOAD_DIR     = __DIR__ . '/uploads/';
 const UPLOAD_URL     = 'https://videogen.22web.org/uploads/';
 const ALLOWED_MIME   = ['image/png', 'image/jpeg', 'image/gif'];
@@ -25,7 +25,7 @@ function fail(string $msg, int $code = 400): never {
     exit;
 }
 
-function rateLimitOrFail(): void {
+function rateLimitOrFail(string $mode): void {
     $ip = $_SERVER['REMOTE_ADDR'] ?? '';
     if (!filter_var($ip, FILTER_VALIDATE_IP)) {
         $ip = 'unknown';
@@ -42,7 +42,8 @@ function rateLimitOrFail(): void {
         if ($age >= 0 && $age < RATELIMIT_SECONDS) {
             $retry = RATELIMIT_SECONDS - $age;
             header('Retry-After: ' . $retry);
-            fail("Rate limit: please wait {$retry}s before generating another video.", 429);
+			$noun = ($mode === 'image-gen') ? 'image' : 'video';
+			fail("Rate limit: please wait {$retry}s before generating another {$noun}.", 429);
         }
     }
 
@@ -90,14 +91,90 @@ $duration    = (int)($_POST['duration'] ?? 5);
 $resolution  = $_POST['resolution']    ?? '768p';
 $aspectRatio = $_POST['aspect_ratio']  ?? '16:9';
 
-if (!in_array($mode, ['text', 'image'], true))    fail('Bad mode');
+if (!in_array($mode, ['text', 'image', 'image-gen'], true)) fail('Bad mode');
 if ($prompt === '' || mb_strlen($prompt) > 5000)  fail('Bad prompt');
-if ($duration < 5 || $duration > 15)              fail('Bad duration');
-if (!in_array($resolution, ['480p', '768p', '2K'], true)) fail('Bad resolution');
-if (!in_array($aspectRatio, ['21:9','16:9','4:3','1:1','3:4','9:16'], true)) fail('Bad aspect ratio');
 
+if ($mode === 'image-gen') {
+    if (!in_array($aspectRatio, ['1:1','4:3','5:4','3:2','16:9'], true)) fail('Bad aspect ratio');
+    if (!in_array($resolution, ['1K','2K'], true))                      fail('Bad resolution');
+} else {
+    if ($duration < 5 || $duration > 15)              fail('Bad duration');
+    if (!in_array($resolution, ['480p','768p','2K'], true)) fail('Bad resolution');
+    if (!in_array($aspectRatio, ['21:9','16:9','4:3','1:1','3:4','9:16'], true)) fail('Bad aspect ratio');
+}
+
+ 
 // ---------- rate limit the expensive part ----------
-rateLimitOrFail();
+rateLimitOrFail($mode);
+
+// ---------- image gen branch ----------
+if ($mode === 'image-gen') {
+    // 1. Handle optional reference image upload
+    $inputReferences = [];
+    if (!empty($_FILES['image']['tmp_name'])) {
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime  = $finfo->file($_FILES['image']['tmp_name']);
+        if (!in_array($mime, ALLOWED_MIME, true)) fail('Only PNG, JPG, GIF allowed');
+        if ($_FILES['image']['size'] > 10 * 1024 * 1024) fail('Image > 10 MB');
+        if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0755, true)) fail('Cannot create upload dir', 500);
+
+        $ext  = match ($mime) {
+            'image/png'  => 'png',
+            'image/jpeg' => 'jpg',
+            'image/gif'  => 'gif',
+        };
+        $name = bin2hex(random_bytes(16)) . '.' . $ext;
+        if (!move_uploaded_file($_FILES['image']['tmp_name'], UPLOAD_DIR . $name)) {
+            fail('Failed to store reference image', 500);
+        }
+        $publicUrl = rtrim(UPLOAD_URL, '/') . '/' . $name;
+        $inputReferences[] = [
+			'type'      => 'image_url',
+			'image_url' => ['url' => $publicUrl],
+		]; // Hy Image 3.5 accepts array of image URLs
+    }
+
+    // 2. Build the Image API request
+    $body = [
+        'model'        => 'tencent/hy-image-v3.5-preview',
+        'prompt'       => $prompt,
+        'aspect_ratio' => $aspectRatio,
+        'resolution'   => $resolution,
+    ];
+    if (!empty($inputReferences)) {
+        $body['input_references'] = $inputReferences;
+    }
+
+    // 3. Submit to OpenRouter Images API
+    $job = orPost('https://openrouter.ai/api/v1/images', $body, OPENROUTER_KEY);
+
+    // 4. Parse response
+	$img = $job['data'][0] ?? null;
+	if (!is_array($img)) {
+		fail('Image generation failed: ' . json_encode($job), 502);
+	}
+	
+	if (!empty($img['b64_json'])) {
+		$imageData = base64_decode($img['b64_json'], true);
+		if ($imageData === false) fail('Invalid base64 image data', 500);
+	} elseif (!empty($img['url']) && filter_var($img['url'], FILTER_VALIDATE_URL)) {
+		$imageData = @file_get_contents($img['url']);
+		if ($imageData === false) fail('Failed to fetch generated image', 502);
+	} else {
+		fail('Unexpected image response: ' . json_encode($job), 502);
+	}
+
+    // 5. Save generated image
+    $ext = 'png';
+    $name = bin2hex(random_bytes(16)) . '.' . $ext;
+    if (!file_put_contents(UPLOAD_DIR . $name, $imageData)) {
+        fail('Failed to save generated image', 500);
+    }
+    $publicUrl = rtrim(UPLOAD_URL, '/') . '/' . $name;
+
+    echo json_encode(['ok' => true, 'image_url' => $publicUrl]);
+    exit;
+}
 
 
 // ---- upload image (image mode) ----
@@ -155,4 +232,7 @@ echo json_encode([
     'polling_url' => $pollUrl,
     'status'      => $job['status'] ?? 'pending',
 ]);
+
+
+
 ?>
