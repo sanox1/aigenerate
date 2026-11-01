@@ -457,14 +457,17 @@
 <div class="generator-card">
   <!-- HEADER -->
   <div class="header">
-    <h1>
-      <i class="fas fa-clapperboard"></i> AI Video Generator
-    </h1>
-    <div class="subhead">Powered by <strong>heygen/heygen-video-1</strong> · OpenRouter</div>
-	<button id="logoutBtn" style="margin-left:auto; background:#1a1e2b; border:1px solid #2a2f3e;
-        color:#94a3b8; padding:.5rem .9rem; border-radius:.6rem; cursor:pointer;
-        font-size:.85rem;">Log out</button>
-		
+      <h1>
+        <i class="fas fa-clapperboard"></i> AI Generator
+      </h1>
+      <div class="subhead">Powered by <strong>heygen/heygen-video-1</strong> and <strong>tencent/hy-image-v3.5-preview</strong> · OpenRouter</div>
+      <br />
+	  <div style="display:flex; align-items:center; gap:12px; margin-left:auto;">
+          <span id="balanceDisplay" style="color:#94a3b8; font-size:0.85rem; background:#1a1e2b; padding:0.4rem 0.8rem; border-radius:0.5rem; border:1px solid #2a2f3e;">
+              Balance: <strong style="color:#fbbf24;">$--</strong>
+          </span>
+          <button id="logoutBtn" style="background:#1a1e2b; border:1px solid #2a2f3e; color:#94a3b8; padding:.5rem .9rem; border-radius:.6rem; cursor:pointer; font-size:.85rem;">Log out</button>
+      </div>
   </div>
 
   <!-- TABS -->
@@ -475,6 +478,9 @@
     <button class="tab-btn" id="tabImageBtn" data-tab="image">
       <i class="fas fa-image"></i> Image to video
     </button>
+	<button class="tab-btn" id="tabImageGenBtn" data-tab="image-gen">
+		<i class="fas fa-paint-brush"></i> Text to Image
+	</button>
   </div>
 
   <!-- MAIN PANEL -->
@@ -591,6 +597,56 @@
         </button>
         <div id="statusImage" class="status-msg"></div>
       </div>
+	  
+	  <!-- TEXT TO IMAGE TAB CONTENT -->
+		<div id="imageGenTab" class="tab-content">
+			<div class="control-group">
+				<label><i class="fas fa-upload"></i> Reference image</label>
+				<label for="imageGenUpload" class="file-upload-area" id="dropZoneImageGen">
+				<i class="fas fa-cloud-upload-alt"></i>
+				<span>Click to upload or drag & drop</span>
+				<small>PNG, JPG, GIF accepted (optional)</small>
+				<input type="file" id="imageGenUpload" accept="image/png, image/jpeg, image/gif">
+				</label>
+				<div id="fileNameRowImageGen" class="file-name-row" style="display: none;">
+				<span id="fileNameDisplayImageGen" class="file-name"></span>
+				<button type="button" id="removeImageBtnImageGen" class="remove-image-btn" title="Remove image" aria-label="Remove image">
+					<i class="fas fa-times"></i>
+				</button>
+				</div>
+			</div>
+			
+			<div class="control-group">
+				<label><i class="fas fa-pen-fancy"></i> Prompt</label>
+				<textarea id="promptImageGen" class="input-field" maxlength="5000" placeholder="Describe the image you want to create..."></textarea>
+				<div class="char-counter"><span id="charCountImageGen">0</span> / 5,000</div>
+			</div>
+			
+			<div class="row-2col">
+				<div class="control-group">
+				<label><i class="fas fa-expand"></i> Aspect ratio</label>
+				<select id="aspectRatioImageGen" class="select-field">
+					<option value="1:1">1:1 (Square)</option>
+					<option value="4:3">4:3 (Classic)</option>
+					<option value="5:4">5:4 (Photo)</option>
+					<option value="3:2">3:2 (Photo)</option>
+					<option value="16:9">16:9 (Landscape)</option>
+				</select>
+				</div>
+				<div class="control-group">
+				<label><i class="fas fa-monitor"></i> Resolution</label>
+				<select id="resolutionImageGen" class="select-field">
+					<option value="1K">1K</option>
+					<option value="2K" selected>2K</option>
+				</select>
+				</div>
+			</div>
+			
+			<button id="generateImageGenBtn" class="generate-btn">
+				<i class="fas fa-sparkles"></i> Generate image
+			</button>
+			<div id="statusImageGen" class="status-msg"></div>
+		</div>
     </div>
 
     <!-- RIGHT: PREVIEW -->
@@ -599,10 +655,12 @@
         <!-- placeholder initially -->
         <div class="preview-placeholder" id="previewPlaceholder">
           <i class="fas fa-film"></i>
-          <p>Your generated video will appear here</p>
+          <p>&nbspYour generated object will appear here</p>
         </div>
         <!-- video element (hidden initially) -->
         <video id="videoPreview" controls style="display: none;"></video>
+		<img id="imagePreview" style="display: none; width: 100%; height: 100%; object-fit: contain;">
+
       </div>
 	  <a id="downloadLink" class="download-btn" download target="_blank" rel="noopener">
 		<i class="fas fa-download"></i> Download video
@@ -627,6 +685,9 @@
   })();
 
   function boot() {
+  
+
+  
     // ----- DOM references -----
     const tabTextBtn = document.getElementById('tabTextBtn');
     const tabImageBtn = document.getElementById('tabImageBtn');
@@ -663,37 +724,165 @@
     let uploadedImageFile = null;
     let lastVideoUrl = null;          // object URL for download
 
-    // ----- helper: clear preview / reset video state -----
-    function resetPreview() {
-	  if (lastVideoUrl && lastVideoUrl.startsWith('blob:')) {
-	  	URL.revokeObjectURL(lastVideoUrl);
-	  }
-	  lastVideoUrl = null;
-      videoPreview.pause();
-      videoPreview.removeAttribute('src');
-      videoPreview.style.display = 'none';
-      previewPlaceholder.style.display = 'flex';
-      previewBox.classList.remove('has-video');
-      downloadLink.classList.remove('visible');
-      downloadLink.removeAttribute('href');
-    }
+	// ----- Text to Image Tab Logic -----
+	const imageGenUpload = document.getElementById('imageGenUpload');
+	const promptImageGen = document.getElementById('promptImageGen');
+	const charCountImageGen = document.getElementById('charCountImageGen');
+	const fileNameRowImageGen = document.getElementById('fileNameRowImageGen');
+	const fileNameDisplayImageGen = document.getElementById('fileNameDisplayImageGen');
+	const removeImageBtnImageGen = document.getElementById('removeImageBtnImageGen');
+	const generateImageGenBtn = document.getElementById('generateImageGenBtn');
+	const statusImageGen = document.getElementById('statusImageGen');
+	const aspectRatioImageGen = document.getElementById('aspectRatioImageGen');
+	const resolutionImageGen = document.getElementById('resolutionImageGen');
+	
+	let uploadedImageFileImageGen = null;
+	
+	// Character counter
+	promptImageGen.addEventListener('input', () => {
+	charCountImageGen.textContent = promptImageGen.value.length;
+	});
+	
+	// File handling
+	function clearImageSelectionImageGen() {
+		imageGenUpload.value = '';
+		uploadedImageFileImageGen = null;
+		fileNameDisplayImageGen.textContent = '';
+		fileNameRowImageGen.style.display = 'none';
+	}
+	
+	imageGenUpload.addEventListener('change', (e) => {
+	const file = e.target.files[0];
+	if (!file) { clearImageSelectionImageGen(); return; }
+	const allowed = ['image/png', 'image/jpeg', 'image/gif'];
+	if (!allowed.includes(file.type)) {
+		alert('Please upload a PNG, JPG, or GIF file.');
+		clearImageSelectionImageGen();
+		return;
+	}
+	uploadedImageFileImageGen = file;
+	fileNameDisplayImageGen.textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+	fileNameRowImageGen.style.display = 'flex';
+	});
+	
+	removeImageBtnImageGen.addEventListener('click', clearImageSelectionImageGen);
+	
+	// Drag & drop (reuse the pattern from the video tab)
+	const dropZoneImageGen = document.getElementById('dropZoneImageGen');
+	dropZoneImageGen.addEventListener('dragover', (e) => { e.preventDefault(); dropZoneImageGen.style.borderColor = '#fbbf24'; dropZoneImageGen.style.background = '#171e2c'; });
+	dropZoneImageGen.addEventListener('dragleave', () => { dropZoneImageGen.style.borderColor = '#3f4658'; dropZoneImageGen.style.background = ''; });
+	dropZoneImageGen.addEventListener('drop', (e) => {
+	e.preventDefault(); dropZoneImageGen.style.borderColor = '#3f4658'; dropZoneImageGen.style.background = '';
+	const files = e.dataTransfer.files;
+	if (files.length) {
+		imageGenUpload.files = files;
+		imageGenUpload.dispatchEvent(new Event('change', { bubbles: true }));
+	}
+	});
+	
+	// Generate Button
+	generateImageGenBtn.addEventListener('click', async () => {
+	const prompt = promptImageGen.value.trim();
+	if (!prompt) {
+		statusImageGen.textContent = '⚠️ Please enter a prompt.';
+		return;
+	}
+	
+	resetPreview(); // Reuse the preview reset from the video tabs
+	statusImageGen.textContent = 'Submitting job…';
+	generateImageGenBtn.disabled = true;
+	const originalHTML = generateImageGenBtn.innerHTML;
+	generateImageGenBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
+	
+	try {
+		const formData = new FormData();
+		formData.append('mode', 'image-gen');
+		formData.append('prompt', prompt);
+		formData.append('aspect_ratio', aspectRatioImageGen.value);
+		formData.append('resolution', resolutionImageGen.value);
+		if (uploadedImageFileImageGen) formData.append('image', uploadedImageFileImageGen);
+	
+		const res = await fetch('/generate.php', { method: 'POST', body: formData });
+		const data = await res.json();
+		if (!data.ok) throw new Error(data.error || 'Generation failed');
+	
+		// Set the preview to the generated image (use the existing preview elements)
+		const imageUrl = data.image_url;
+		setPreviewImage(imageUrl); // Your setPreviewVideo function works for images too if you adjust it
+		statusImageGen.textContent = '✅ Done!';
+	} catch (err) {
+		statusImageGen.textContent = '❌ ' + err.message;
+	} finally {
+		generateImageGenBtn.disabled = false;
+		generateImageGenBtn.innerHTML = originalHTML;
+	}
+	});
 
-    // ----- set preview video from a blob url -----
-	function setPreviewVideo(url) {
-		// Don't revoke remote URLs; only revoke blob: URLs we created
+    // ----- helper: clear preview / reset video state -----
+	function resetPreview() {
 		if (lastVideoUrl && lastVideoUrl.startsWith('blob:')) {
 			URL.revokeObjectURL(lastVideoUrl);
 		}
-		lastVideoUrl = url;
+		lastVideoUrl = null;
 		
-		videoPreview.src = url;
+		videoPreview.pause();
+		videoPreview.removeAttribute('src');
+		videoPreview.style.display = 'none';
+		
+		const imgPreview = document.getElementById('imagePreview');
+		if (imgPreview) {
+			imgPreview.style.display = 'none';
+			imgPreview.removeAttribute('src');
+		}
+		
+		previewPlaceholder.style.display = 'flex';
+		previewBox.classList.remove('has-video');
+		downloadLink.classList.remove('visible');
+		downloadLink.removeAttribute('href');
+		downloadLink.removeAttribute('download');  
+	}
+
+    // ----- set preview video from a blob url -----
+	function setPreviewVideo(url) {
+		if (lastVideoUrl && lastVideoUrl.startsWith('blob:')) URL.revokeObjectURL(lastVideoUrl);
+		lastVideoUrl = url;
+	
+		// Two URLs:
+		//  - playUrl  = inline stream (used by <video>)
+		//  - dlUrl    = attachment download (used by <a download>)
+		const playUrl = '/download.php?stream=1&url=' + encodeURIComponent(url);
+		const dlUrl   = '/download.php?url='        + encodeURIComponent(url);
+	
+		videoPreview.src = playUrl;
 		videoPreview.style.display = 'block';
 		previewPlaceholder.style.display = 'none';
 		previewBox.classList.add('has-video');
-		
-		// Let the download go through our own PHP proxy so cross-origin download works
-		downloadLink.href = '/download.php?url=' + encodeURIComponent(url);
+	
+		downloadLink.href = dlUrl;
+		downloadLink.removeAttribute('download');   // let PHP send Content-Disposition
 		downloadLink.classList.add('visible');
+		downloadLink.innerHTML = '<i class="fas fa-download"></i> Download video';
+	}
+    // ----- set preview image   -----
+	function setPreviewImage(url) {
+		if (lastVideoUrl && lastVideoUrl.startsWith('blob:')) URL.revokeObjectURL(lastVideoUrl);
+		lastVideoUrl = url;
+	
+		videoPreview.style.display = 'none';
+		const img = document.getElementById('imagePreview');
+		img.src = url;
+		img.style.display = 'block';
+		previewPlaceholder.style.display = 'none';
+		previewBox.classList.add('has-video');
+	
+		// Derive extension so the saved file isn't extension-less
+		const m = url.split('?')[0].match(/\.(png|jpe?g|gif|webp)$/i);
+		const ext = m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'png';
+	
+		downloadLink.href = url;                          // ← REQUIRED
+		downloadLink.setAttribute('download', `generated-image.${ext}`);
+		downloadLink.classList.add('visible');
+		downloadLink.innerHTML = '<i class="fas fa-download"></i> Download image';
 	}
 
     // ----- simulate video generation (placeholder) -----
@@ -763,24 +952,26 @@
 	}
 
     // ----- TAB SWITCHING -----
-    function setActiveTab(tab) {
-      currentTab = tab;
-      
-      if (tab === 'text') {
-        tabTextBtn.classList.add('active');
-        tabImageBtn.classList.remove('active');
-        textTab.classList.add('active');
-        imageTab.classList.remove('active');
-      } else {
-        tabImageBtn.classList.add('active');
-        tabTextBtn.classList.remove('active');
-        imageTab.classList.add('active');
-        textTab.classList.remove('active');
-      }
-    }
+	const tabImageGenBtn = document.getElementById('tabImageGenBtn');
+	const imageGenTab = document.getElementById('imageGenTab');
 
-    tabTextBtn.addEventListener('click', () => setActiveTab('text'));
-    tabImageBtn.addEventListener('click', () => setActiveTab('image'));
+	function setActiveTab(tab) {
+		const tabs = {
+			'text':      { btn: tabTextBtn,     content: textTab },
+			'image':     { btn: tabImageBtn,    content: imageTab },
+			'image-gen': { btn: tabImageGenBtn, content: imageGenTab },
+		};
+		Object.entries(tabs).forEach(([key, { btn, content }]) => {
+			const active = key === tab;
+			btn.classList.toggle('active', active);
+			content.classList.toggle('active', active);
+		});
+		currentTab = tab;
+	}
+	
+	tabTextBtn.addEventListener('click', () => setActiveTab('text'));
+	tabImageBtn.addEventListener('click', () => setActiveTab('image'));
+	tabImageGenBtn.addEventListener('click', () => setActiveTab('image-gen'));
 
     // ----- TEXT TAB: character counter -----
     promptText.addEventListener('input', () => {
@@ -802,10 +993,10 @@
 	const removeImageBtn   = document.getElementById('removeImageBtn');
 	
 	function clearImageSelection() {
-	imageUpload.value = '';          // resets the <input type="file">
-	uploadedImageFile = null;
-	fileNameDisplay.textContent = '';
-	fileNameRow.style.display = 'none';
+		imageUpload.value = '';          // resets the <input type="file">
+		uploadedImageFile = null;
+		fileNameDisplay.textContent = '';
+		fileNameRow.style.display = 'none';
 	}
 	
 	imageUpload.addEventListener('change', (e) => {
@@ -922,6 +1113,21 @@
 		generateImageBtn.innerHTML = originalHTML;
 	}
 	}); 
+
+	// ----- Fetch and display OpenRouter balance -----
+	(async () => {
+		try {
+			const res = await fetch('/balance.php', { cache: 'no-store' });
+			const data = await res.json();
+			if (data.ok) {
+				document.querySelector('#balanceDisplay strong').textContent = '$' + data.remaining.toFixed(2);
+			} else {
+				document.querySelector('#balanceDisplay strong').textContent = 'N/A';
+			}
+		} catch {
+			document.querySelector('#balanceDisplay strong').textContent = 'N/A';
+		}
+	})();
 
     // On page load, reset preview
     resetPreview();
