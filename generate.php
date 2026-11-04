@@ -8,17 +8,17 @@ if (empty($_SESSION['user'])) {
     exit;
 }
 
-const OPENROUTER_KEY = 'sk-or-v1-replace_ME';
+const OPENROUTER_KEY = 'sk-or-v1-changeme';   // ⚠ rotate the old key now
 const UPLOAD_DIR     = __DIR__ . '/uploads/';
 const UPLOAD_URL     = 'https://videogen.22web.org/uploads/';
 const ALLOWED_MIME   = ['image/png', 'image/jpeg', 'image/gif'];
 
-const RATELIMIT_DIR     = __DIR__ . '/.ratelimit/';   // outside uploads/
+const RATELIMIT_DIR     = __DIR__ . '/.ratelimit/';
 const RATELIMIT_SECONDS = 20;
 
 header('Content-Type: application/json');
 
-// ---------- helpers (defined before use) ----------
+// ---------- helpers ----------
 function fail(string $msg, int $code = 400): never {
     http_response_code($code);
     echo json_encode(['ok' => false, 'error' => $msg]);
@@ -42,12 +42,11 @@ function rateLimitOrFail(string $mode): void {
         if ($age >= 0 && $age < RATELIMIT_SECONDS) {
             $retry = RATELIMIT_SECONDS - $age;
             header('Retry-After: ' . $retry);
-			$noun = ($mode === 'image-gen') ? 'image' : 'video';
-			fail("Rate limit: please wait {$retry}s before generating another {$noun}.", 429);
+            $noun = ($mode === 'image-gen') ? 'image' : 'video';
+            fail("Rate limit: please wait {$retry}s before generating another {$noun}.", 429);
         }
     }
 
-    // opportunistic cleanup
     if (random_int(1, 100) === 1) {
         foreach (glob(RATELIMIT_DIR . '*') as $f) {
             if (is_file($f) && time() - filemtime($f) > 3600) {
@@ -90,20 +89,27 @@ $prompt      = trim($_POST['prompt']  ?? '');
 $duration    = (int)($_POST['duration'] ?? 5);
 $resolution  = $_POST['resolution']    ?? '768p';
 $aspectRatio = $_POST['aspect_ratio']  ?? '16:9';
+$size        = trim((string)($_POST['size'] ?? ''));
+if ($size === '') $size = null;
 
 if (!in_array($mode, ['text', 'image', 'image-gen'], true)) fail('Bad mode');
-if ($prompt === '' || mb_strlen($prompt) > 5000)  fail('Bad prompt');
+if ($prompt === '' || mb_strlen($prompt) > 5000)            fail('Bad prompt');
 
 if ($mode === 'image-gen') {
-    if (!in_array($aspectRatio, ['1:1','4:3','5:4','3:2','16:9'], true)) fail('Bad aspect ratio');
-    if (!in_array($resolution, ['1K','2K'], true))                      fail('Bad resolution');
+    if ($size !== null) {
+        if (!preg_match('/^\d{2,5}x\d{2,5}$/i', $size)) {
+            fail('Bad size format. Use WIDTHxHEIGHT (e.g. 1024x1024).');
+        }
+    } else {
+        if (!in_array($aspectRatio, ['1:1','4:3','5:4','3:2','16:9'], true)) fail('Bad aspect ratio');
+        if (!in_array($resolution, ['1K','2K'], true))                      fail('Bad resolution');
+    }
 } else {
     if ($duration < 5 || $duration > 15)              fail('Bad duration');
     if (!in_array($resolution, ['480p','768p','2K'], true)) fail('Bad resolution');
     if (!in_array($aspectRatio, ['21:9','16:9','4:3','1:1','3:4','9:16'], true)) fail('Bad aspect ratio');
 }
 
- 
 // ---------- rate limit the expensive part ----------
 rateLimitOrFail($mode);
 
@@ -129,18 +135,24 @@ if ($mode === 'image-gen') {
         }
         $publicUrl = rtrim(UPLOAD_URL, '/') . '/' . $name;
         $inputReferences[] = [
-			'type'      => 'image_url',
-			'image_url' => ['url' => $publicUrl],
-		]; // Hy Image 3.5 accepts array of image URLs
+            'type'      => 'image_url',
+            'image_url' => ['url' => $publicUrl],
+        ];
     }
 
-    // 2. Build the Image API request
+    // 2. Build the Image API request — size XOR (aspect_ratio + resolution)
     $body = [
-        'model'        => 'tencent/hy-image-v3.5-preview',
-        'prompt'       => $prompt,
-        'aspect_ratio' => $aspectRatio,
-        'resolution'   => $resolution,
+        'model'  => 'tencent/hy-image-v3.5-preview',
+        'prompt' => $prompt,
     ];
+
+    if ($size !== null) {
+        $body['size'] = $size;
+    } else {
+        $body['aspect_ratio'] = $aspectRatio;
+        $body['resolution']   = $resolution;
+    }
+
     if (!empty($inputReferences)) {
         $body['input_references'] = $inputReferences;
     }
@@ -149,20 +161,20 @@ if ($mode === 'image-gen') {
     $job = orPost('https://openrouter.ai/api/v1/images', $body, OPENROUTER_KEY);
 
     // 4. Parse response
-	$img = $job['data'][0] ?? null;
-	if (!is_array($img)) {
-		fail('Image generation failed: ' . json_encode($job), 502);
-	}
-	
-	if (!empty($img['b64_json'])) {
-		$imageData = base64_decode($img['b64_json'], true);
-		if ($imageData === false) fail('Invalid base64 image data', 500);
-	} elseif (!empty($img['url']) && filter_var($img['url'], FILTER_VALIDATE_URL)) {
-		$imageData = @file_get_contents($img['url']);
-		if ($imageData === false) fail('Failed to fetch generated image', 502);
-	} else {
-		fail('Unexpected image response: ' . json_encode($job), 502);
-	}
+    $img = $job['data'][0] ?? null;
+    if (!is_array($img)) {
+        fail('Image generation failed: ' . json_encode($job), 502);
+    }
+
+    if (!empty($img['b64_json'])) {
+        $imageData = base64_decode($img['b64_json'], true);
+        if ($imageData === false) fail('Invalid base64 image data', 500);
+    } elseif (!empty($img['url']) && filter_var($img['url'], FILTER_VALIDATE_URL)) {
+        $imageData = @file_get_contents($img['url']);
+        if ($imageData === false) fail('Failed to fetch generated image', 502);
+    } else {
+        fail('Unexpected image response: ' . json_encode($job), 502);
+    }
 
     // 5. Save generated image
     $ext = 'png';
@@ -175,7 +187,6 @@ if ($mode === 'image-gen') {
     echo json_encode(['ok' => true, 'image_url' => $publicUrl]);
     exit;
 }
-
 
 // ---- upload image (image mode) ----
 $frameImages = null;
@@ -204,7 +215,7 @@ if ($mode === 'image') {
     ]];
 }
 
-// ---- submit job ----
+// ---- submit video job ----
 $body = [
     'model'      => 'heygen/heygen-video-1',
     'prompt'     => $prompt,
@@ -219,10 +230,8 @@ if ($frameImages) {
 
 $job = orPost('https://openrouter.ai/api/v1/videos', $body, OPENROUTER_KEY);
 
-// The OpenRouter /videos response gives us at least { id, status }.
-// polling_url is used when present; otherwise we build it.
-$jobId     = $job['id'] ?? null;
-$pollUrl   = $job['polling_url'] ?? ($jobId ? "https://openrouter.ai/api/v1/videos/{$jobId}" : null);
+$jobId   = $job['id'] ?? null;
+$pollUrl = $job['polling_url'] ?? ($jobId ? "https://openrouter.ai/api/v1/videos/{$jobId}" : null);
 
 if (!$jobId || !$pollUrl) fail('OpenRouter did not return a job id', 502);
 
@@ -232,7 +241,3 @@ echo json_encode([
     'polling_url' => $pollUrl,
     'status'      => $job['status'] ?? 'pending',
 ]);
-
-
-
-?>

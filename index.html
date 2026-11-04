@@ -640,6 +640,13 @@
 					<option value="2K" selected>2K</option>
 				</select>
 				</div>
+				<div class="control-group">
+					<label><i class="fas fa-ruler-combined"></i> Custom Size (Optional)</label>
+					<input type="text" id="sizeImageGen" class="input-field" placeholder="e.g. 1024x1024">
+					<small style="color:#64748b; font-size:0.75rem; margin-top:0.2rem;">
+						If filled, Resolution and Aspect Ratio are ignored.
+					</small>
+				</div>
 			</div>
 			
 			<button id="generateImageGenBtn" class="generate-btn">
@@ -779,7 +786,18 @@
 		imageGenUpload.dispatchEvent(new Event('change', { bubbles: true }));
 	}
 	});
-	
+	const sizeImageGen = document.getElementById('sizeImageGen');
+
+	sizeImageGen.addEventListener('input', () => {
+		const hasSize = sizeImageGen.value.trim() !== '';
+		aspectRatioImageGen.disabled = hasSize;
+		resolutionImageGen.disabled = hasSize;
+		
+		// Optional: visually dim the dropdowns
+		aspectRatioImageGen.style.opacity = hasSize ? '0.5' : '1';
+		resolutionImageGen.style.opacity = hasSize ? '0.5' : '1';
+	});
+
 	// Generate Button
 	generateImageGenBtn.addEventListener('click', async () => {
 	const prompt = promptImageGen.value.trim();
@@ -798,10 +816,17 @@
 		const formData = new FormData();
 		formData.append('mode', 'image-gen');
 		formData.append('prompt', prompt);
-		formData.append('aspect_ratio', aspectRatioImageGen.value);
-		formData.append('resolution', resolutionImageGen.value);
+		const customSize = sizeImageGen.value.trim();
+		if (customSize) {
+			// Send size only (resolution & aspect ratio are ignored by API)
+			formData.append('size', customSize);
+		} else {
+			// Send standard dropdowns
+			formData.append('aspect_ratio', aspectRatioImageGen.value);
+			formData.append('resolution', resolutionImageGen.value);
+		}
+		
 		if (uploadedImageFileImageGen) formData.append('image', uploadedImageFileImageGen);
-	
 		const res = await fetch('/generate.php', { method: 'POST', body: formData });
 		const data = await res.json();
 		if (!data.ok) throw new Error(data.error || 'Generation failed');
